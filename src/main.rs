@@ -40,6 +40,7 @@ struct App {
     line_end: Option<egui::Pos2>,
     mouse1_pressed: bool,
     last_mouse1_click: Option<egui::Pos2>,
+    last_click_in_circle: bool,
 }
 
 impl App {
@@ -52,6 +53,7 @@ impl App {
             line_end: None,
             mouse1_pressed: false,
             last_mouse1_click: None,
+            last_click_in_circle: false,
         }
     }
 }
@@ -61,7 +63,10 @@ impl eframe::App for App {
         // Update mouse state
         self.mouse1_pressed = ctx.input(|i| i.pointer.primary_down());
         if ctx.input(|i| i.pointer.primary_clicked()) {
-            self.last_mouse1_click = ctx.input(|i| i.pointer.hover_pos());
+            if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                self.last_mouse1_click = Some(pos);
+                self.last_click_in_circle = self.box1.is_point_in_circle(pos) || self.box2.is_point_in_circle(pos);
+            }
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -71,6 +76,7 @@ impl eframe::App for App {
                 if let Some(pos) = self.last_mouse1_click {
                     ui.label(format!("Last Mouse1 click: ({:.1}, {:.1})", pos.x, pos.y));
                 }
+                ui.label(format!("Last click in circle: {}", self.last_click_in_circle));
                 ui.label(format!("Box1 position: ({:.1}, {:.1})", self.box1.position.x, self.box1.position.y));
                 ui.label(format!("Box2 position: ({:.1}, {:.1})", self.box2.position.x, self.box2.position.y));
             });
@@ -80,9 +86,9 @@ impl eframe::App for App {
             let response1 = ui.allocate_rect(rect1, egui::Sense::click_and_drag());
             
             if response1.dragged() {
-                // Only move the box if we're not clicking on the circle
+                // Only move the box if we're not clicking on the circle and not in the special condition
                 if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                    if !self.box1.is_point_in_circle(pointer_pos) {
+                    if !self.box1.is_point_in_circle(pointer_pos) && !(self.mouse1_pressed && self.last_click_in_circle) {
                         self.box1.position += response1.drag_delta();
                         self.box1.circle_center = egui::Pos2::new(
                             self.box1.position.x + self.box1.size.x / 2.0,
@@ -97,9 +103,9 @@ impl eframe::App for App {
             let response2 = ui.allocate_rect(rect2, egui::Sense::click_and_drag());
             
             if response2.dragged() {
-                // Only move the box if we're not clicking on the circle
+                // Only move the box if we're not clicking on the circle and not in the special condition
                 if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                    if !self.box2.is_point_in_circle(pointer_pos) {
+                    if !self.box2.is_point_in_circle(pointer_pos) && !(self.mouse1_pressed && self.last_click_in_circle) {
                         self.box2.position += response2.drag_delta();
                         self.box2.circle_center = egui::Pos2::new(
                             self.box2.position.x + self.box2.size.x / 2.0,
