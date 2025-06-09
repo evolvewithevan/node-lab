@@ -1,6 +1,9 @@
 use eframe::egui;
+use uuid::Uuid;
 
 struct BoxWithCircle {
+    id: Uuid,
+    circle_id: Uuid,
     position: egui::Pos2,
     size: egui::Vec2,
     circle_center: egui::Pos2,
@@ -17,6 +20,8 @@ impl BoxWithCircle {
         );
         
         Self {
+            id: Uuid::new_v4(),
+            circle_id: Uuid::new_v4(),
             position,
             size,
             circle_center,
@@ -85,15 +90,33 @@ impl eframe::App for App {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // Display info text at top left
-            ui.horizontal(|ui| {
-                ui.label(format!("Mouse1 pressed: {}", self.mouse1_pressed));
-                if let Some(pos) = self.last_mouse1_click {
-                    ui.label(format!("Last Mouse1 click: ({:.1}, {:.1})", pos.x, pos.y));
-                }
-                ui.label(format!("Last click in circle: {}", self.last_click_in_circle));
-                ui.label(format!("Circle dragging: {}", self.is_circle_dragging));
-                ui.label(format!("Box1 position: ({:.1}, {:.1})", self.box1.position.x, self.box1.position.y));
-                ui.label(format!("Box2 position: ({:.1}, {:.1})", self.box2.position.x, self.box2.position.y));
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(format!("Mouse1 pressed: {}", self.mouse1_pressed));
+                    if let Some(pos) = self.last_mouse1_click {
+                        ui.label(format!("Last Mouse1 click: ({:.1}, {:.1})", pos.x, pos.y));
+                    }
+                });
+                
+                ui.horizontal(|ui| {
+                    ui.label(format!("Last click in circle: {}", self.last_click_in_circle));
+                    ui.label(format!("Circle dragging: {}", self.is_circle_dragging));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label(format!("Box1 position: ({:.1}, {:.1})", self.box1.position.x, self.box1.position.y));
+                    ui.label(format!("Box2 position: ({:.1}, {:.1})", self.box2.position.x, self.box2.position.y));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label(format!("Box1 UUID: {}", self.box1.id));
+                    ui.label(format!("Box1 Circle UUID: {}", self.box1.circle_id));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label(format!("Box2 UUID: {}", self.box2.id));
+                    ui.label(format!("Box2 Circle UUID: {}", self.box2.circle_id));
+                });
             });
 
             // Draw first box and circle

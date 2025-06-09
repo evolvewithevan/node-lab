@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 eframe = "0.26.0"
-egui = "0.26.0" 
+egui = "0.26.0"
+uuid = { version = "1.7.0", features = ["v4"] } 
