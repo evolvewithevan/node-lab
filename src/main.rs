@@ -38,6 +38,8 @@ struct App {
     is_drawing_line: bool,
     line_start: Option<egui::Pos2>,
     line_end: Option<egui::Pos2>,
+    mouse1_pressed: bool,
+    last_mouse1_click: Option<egui::Pos2>,
 }
 
 impl App {
@@ -48,13 +50,31 @@ impl App {
             is_drawing_line: false,
             line_start: None,
             line_end: None,
+            mouse1_pressed: false,
+            last_mouse1_click: None,
         }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Update mouse state
+        self.mouse1_pressed = ctx.input(|i| i.pointer.primary_down());
+        if ctx.input(|i| i.pointer.primary_clicked()) {
+            self.last_mouse1_click = ctx.input(|i| i.pointer.hover_pos());
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Display info text at top left
+            ui.horizontal(|ui| {
+                ui.label(format!("Mouse1 pressed: {}", self.mouse1_pressed));
+                if let Some(pos) = self.last_mouse1_click {
+                    ui.label(format!("Last Mouse1 click: ({:.1}, {:.1})", pos.x, pos.y));
+                }
+                ui.label(format!("Box1 position: ({:.1}, {:.1})", self.box1.position.x, self.box1.position.y));
+                ui.label(format!("Box2 position: ({:.1}, {:.1})", self.box2.position.x, self.box2.position.y));
+            });
+
             // Draw first box and circle
             let rect1 = egui::Rect::from_min_size(self.box1.position, self.box1.size);
             let response1 = ui.allocate_rect(rect1, egui::Sense::click_and_drag());
