@@ -87,6 +87,98 @@ impl App {
             current_connection_start: None,
         }
     }
+
+    fn update_box_position(box_with_circle: &mut BoxWithCircle, drag_delta: egui::Vec2) {
+        box_with_circle.position += drag_delta;
+        box_with_circle.circle_center = egui::Pos2::new(
+            box_with_circle.position.x + box_with_circle.size.x / 2.0,
+            box_with_circle.position.y + box_with_circle.size.y / 2.0,
+        );
+    }
+
+    fn handle_box_drag(box_with_circle: &mut BoxWithCircle, response: &egui::Response, pointer_pos: Option<egui::Pos2>, is_circle_dragging: bool) {
+        if !response.dragged() {
+            return;
+        }
+
+        if let Some(pos) = pointer_pos {
+            if !box_with_circle.is_point_in_circle(pos) && !is_circle_dragging {
+                Self::update_box_position(box_with_circle, response.drag_delta());
+            }
+        }
+    }
+
+    fn handle_circle_click(&mut self, pointer_pos: egui::Pos2) {
+        let in_box1_circle = self.box1.is_point_in_circle(pointer_pos);
+        let in_box2_circle = self.box2.is_point_in_circle(pointer_pos);
+
+        if !in_box1_circle && !in_box2_circle {
+            self.clear_line_state();
+            return;
+        }
+
+        self.is_drawing_line = true;
+        if in_box1_circle {
+            self.line_start = Some(self.box1.circle_center);
+            self.current_connection_start = Some((self.box1.id, self.box1.circle_id));
+        } else {
+            self.line_start = Some(self.box2.circle_center);
+            self.current_connection_start = Some((self.box2.id, self.box2.circle_id));
+        }
+    }
+
+    fn clear_line_state(&mut self) {
+        self.is_drawing_line = false;
+        self.line_start = None;
+        self.line_end = None;
+        self.current_connection_start = None;
+    }
+
+    fn handle_connection_creation(&mut self, pointer_pos: egui::Pos2) {
+        let Some((start_box_id, start_circle_id)) = self.current_connection_start else { return };
+        let _start = self.line_start; // Keep for future use if needed
+
+        let in_box1_circle = self.box1.is_point_in_circle(pointer_pos);
+        let in_box2_circle = self.box2.is_point_in_circle(pointer_pos);
+
+        if !in_box1_circle && !in_box2_circle {
+            return;
+        }
+
+        if in_box1_circle && start_box_id != self.box1.id {
+            self.create_connection(start_box_id, start_circle_id, self.box1.id, self.box1.circle_id);
+            self.line_end = Some(self.box1.circle_center);
+        } else if in_box2_circle && start_box_id != self.box2.id {
+            self.create_connection(start_box_id, start_circle_id, self.box2.id, self.box2.circle_id);
+            self.line_end = Some(self.box2.circle_center);
+        }
+    }
+
+    fn create_connection(&mut self, start_box_id: Uuid, start_circle_id: Uuid, end_box_id: Uuid, end_circle_id: Uuid) {
+        let connection = Connection {
+            start_box_id,
+            start_circle_id,
+            end_box_id,
+            end_circle_id,
+        };
+        self.connections.push(connection);
+    }
+
+    fn draw_connections(&self, painter: &egui::Painter) {
+        for connection in &self.connections {
+            let start = if connection.start_box_id == self.box1.id {
+                self.box1.circle_center
+            } else {
+                self.box2.circle_center
+            };
+            let end = if connection.end_box_id == self.box1.id {
+                self.box1.circle_center
+            } else {
+                self.box2.circle_center
+            };
+            painter.line_segment([start, end], egui::Stroke::new(4.0, egui::Color32::WHITE));
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -157,36 +249,14 @@ impl eframe::App for App {
             // Draw first box and circle
             let rect1 = egui::Rect::from_min_size(self.box1.position, self.box1.size);
             let response1 = ui.allocate_rect(rect1, egui::Sense::click_and_drag());
-            
-            if response1.dragged() {
-                // Only move the box if we're not clicking on the circle and not in circle dragging state
-                if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                    if !self.box1.is_point_in_circle(pointer_pos) && !self.is_circle_dragging {
-                        self.box1.position += response1.drag_delta();
-                        self.box1.circle_center = egui::Pos2::new(
-                            self.box1.position.x + self.box1.size.x / 2.0,
-                            self.box1.position.y + self.box1.size.y / 2.0,
-                        );
-                    }
-                }
-            }
+            let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+            let is_circle_dragging = self.is_circle_dragging;
+            Self::handle_box_drag(&mut self.box1, &response1, pointer_pos, is_circle_dragging);
 
             // Draw second box and circle
             let rect2 = egui::Rect::from_min_size(self.box2.position, self.box2.size);
             let response2 = ui.allocate_rect(rect2, egui::Sense::click_and_drag());
-            
-            if response2.dragged() {
-                // Only move the box if we're not clicking on the circle and not in circle dragging state
-                if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                    if !self.box2.is_point_in_circle(pointer_pos) && !self.is_circle_dragging {
-                        self.box2.position += response2.drag_delta();
-                        self.box2.circle_center = egui::Pos2::new(
-                            self.box2.position.x + self.box2.size.x / 2.0,
-                            self.box2.position.y + self.box2.size.y / 2.0,
-                        );
-                    }
-                }
-            }
+            Self::handle_box_drag(&mut self.box2, &response2, pointer_pos, is_circle_dragging);
 
             let painter = ui.painter();
 
@@ -201,33 +271,7 @@ impl eframe::App for App {
             // Handle line drawing
             if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
                 if ui.input(|i| i.pointer.primary_clicked()) {
-                    println!("\n=== Mouse clicked ===");
-                    println!("Click position: ({:.1}, {:.1})", pointer_pos.x, pointer_pos.y);
-                    
-                    let in_box1_circle = self.box1.is_point_in_circle(pointer_pos);
-                    let in_box2_circle = self.box2.is_point_in_circle(pointer_pos);
-                    
-                    if in_box1_circle {
-                        println!("Click is inside box1's circle");
-                        self.is_drawing_line = true;
-                        self.line_start = Some(self.box1.circle_center);
-                        self.current_connection_start = Some((self.box1.id, self.box1.circle_id));
-                        println!("Line start set to: ({:.1}, {:.1})", self.box1.circle_center.x, self.box1.circle_center.y);
-                        println!("is_drawing_line set to: {}", self.is_drawing_line);
-                    } else if in_box2_circle {
-                        println!("Click is inside box2's circle");
-                        self.is_drawing_line = true;
-                        self.line_start = Some(self.box2.circle_center);
-                        self.current_connection_start = Some((self.box2.id, self.box2.circle_id));
-                        println!("Line start set to: ({:.1}, {:.1})", self.box2.circle_center.x, self.box2.circle_center.y);
-                        println!("is_drawing_line set to: {}", self.is_drawing_line);
-                    } else {
-                        println!("Click is NOT inside any circle - clearing line state");
-                        self.is_drawing_line = false;
-                        self.line_start = None;
-                        self.line_end = None;
-                        self.current_connection_start = None;
-                    }
+                    self.handle_circle_click(pointer_pos);
                 }
             }
 
@@ -235,86 +279,21 @@ impl eframe::App for App {
             if self.is_drawing_line {
                 if let Some(start) = self.line_start {
                     let end = ui.input(|i| i.pointer.hover_pos()).unwrap_or(start);
-                    println!("\n=== Drawing line while dragging ===");
-                    println!("Drawing line from ({:.1}, {:.1}) to ({:.1}, {:.1})", start.x, start.y, end.x, end.y);
                     painter.line_segment([start, end], egui::Stroke::new(2.0, egui::Color32::WHITE));
                 }
             }
 
             // Handle mouse release
             if ui.input(|i| i.pointer.any_released()) {
-                println!("\n=== Mouse released ===");
-                println!("is_drawing_line: {}", self.is_drawing_line);
                 if self.is_drawing_line {
-                    if let Some(start) = self.line_start {
-                        if let Some((start_box_id, start_circle_id)) = self.current_connection_start {
-                            let pointer_pos = ui.input(|i| i.pointer.hover_pos()).unwrap_or(start);
-                            println!("Release position: ({:.1}, {:.1})", pointer_pos.x, pointer_pos.y);
-                            
-                            // Check if pointer is over box1's circle
-                            let in_box1_circle = self.box1.is_point_in_circle(pointer_pos);
-                            let in_box2_circle = self.box2.is_point_in_circle(pointer_pos);
-                            
-                            println!("In box1 circle: {}, In box2 circle: {}", in_box1_circle, in_box2_circle);
-                            
-                            if in_box1_circle {
-                                println!("Pointer is over box1's circle");
-                                if start_box_id != self.box1.id {
-                                    println!("Creating connection to box1");
-                                    let connection = Connection {
-                                        start_box_id,
-                                        start_circle_id,
-                                        end_box_id: self.box1.id,
-                                        end_circle_id: self.box1.circle_id,
-                                    };
-                                    self.connections.push(connection);
-                                    println!("Connection created. Total connections: {}", self.connections.len());
-                                } else {
-                                    println!("Cannot connect to same box (box1)");
-                                }
-                                self.line_end = Some(self.box1.circle_center);
-                            }
-                            // Check if pointer is over box2's circle
-                            else if in_box2_circle {
-                                println!("Pointer is over box2's circle");
-                                if start_box_id != self.box2.id {
-                                    println!("Creating connection to box2");
-                                    let connection = Connection {
-                                        start_box_id,
-                                        start_circle_id,
-                                        end_box_id: self.box2.id,
-                                        end_circle_id: self.box2.circle_id,
-                                    };
-                                    self.connections.push(connection);
-                                    println!("Connection created. Total connections: {}", self.connections.len());
-                                } else {
-                                    println!("Cannot connect to same box (box2)");
-                                }
-                                self.line_end = Some(self.box2.circle_center);
-                            }
-                        }
+                    if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                        self.handle_connection_creation(pointer_pos);
                     }
                 }
             }
 
             // Draw all connections
-            println!("\n=== Drawing connections ===");
-            println!("Number of connections to draw: {}", self.connections.len());
-            for (i, connection) in self.connections.iter().enumerate() {
-                let start = if connection.start_box_id == self.box1.id {
-                    self.box1.circle_center
-                } else {
-                    self.box2.circle_center
-                };
-                let end = if connection.end_box_id == self.box1.id {
-                    self.box1.circle_center
-                } else {
-                    self.box2.circle_center
-                };
-                println!("Drawing connection {}: from ({:.1}, {:.1}) to ({:.1}, {:.1})", 
-                    i, start.x, start.y, end.x, end.y);
-                painter.line_segment([start, end], egui::Stroke::new(4.0, egui::Color32::WHITE));
-            }
+            self.draw_connections(&painter);
 
             // Draw the final line if both points are set
             if let (Some(start), Some(end)) = (self.line_start, self.line_end) {
