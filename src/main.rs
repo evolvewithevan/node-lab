@@ -41,6 +41,8 @@ struct App {
     mouse1_pressed: bool,
     last_mouse1_click: Option<egui::Pos2>,
     last_click_in_circle: bool,
+    is_circle_dragging: bool,
+    circle_drag_origin: Option<egui::Pos2>,
 }
 
 impl App {
@@ -54,6 +56,8 @@ impl App {
             mouse1_pressed: false,
             last_mouse1_click: None,
             last_click_in_circle: false,
+            is_circle_dragging: false,
+            circle_drag_origin: None,
         }
     }
 }
@@ -66,7 +70,17 @@ impl eframe::App for App {
             if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
                 self.last_mouse1_click = Some(pos);
                 self.last_click_in_circle = self.box1.is_point_in_circle(pos) || self.box2.is_point_in_circle(pos);
+                if self.last_click_in_circle {
+                    self.is_circle_dragging = true;
+                    self.circle_drag_origin = Some(pos);
+                }
             }
+        }
+        
+        // Reset circle dragging state when mouse is released
+        if ctx.input(|i| i.pointer.any_released()) {
+            self.is_circle_dragging = false;
+            self.circle_drag_origin = None;
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -77,6 +91,7 @@ impl eframe::App for App {
                     ui.label(format!("Last Mouse1 click: ({:.1}, {:.1})", pos.x, pos.y));
                 }
                 ui.label(format!("Last click in circle: {}", self.last_click_in_circle));
+                ui.label(format!("Circle dragging: {}", self.is_circle_dragging));
                 ui.label(format!("Box1 position: ({:.1}, {:.1})", self.box1.position.x, self.box1.position.y));
                 ui.label(format!("Box2 position: ({:.1}, {:.1})", self.box2.position.x, self.box2.position.y));
             });
@@ -86,9 +101,9 @@ impl eframe::App for App {
             let response1 = ui.allocate_rect(rect1, egui::Sense::click_and_drag());
             
             if response1.dragged() {
-                // Only move the box if we're not clicking on the circle and not in the special condition
+                // Only move the box if we're not clicking on the circle and not in circle dragging state
                 if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                    if !self.box1.is_point_in_circle(pointer_pos) && !(self.mouse1_pressed && self.last_click_in_circle) {
+                    if !self.box1.is_point_in_circle(pointer_pos) && !self.is_circle_dragging {
                         self.box1.position += response1.drag_delta();
                         self.box1.circle_center = egui::Pos2::new(
                             self.box1.position.x + self.box1.size.x / 2.0,
@@ -103,9 +118,9 @@ impl eframe::App for App {
             let response2 = ui.allocate_rect(rect2, egui::Sense::click_and_drag());
             
             if response2.dragged() {
-                // Only move the box if we're not clicking on the circle and not in the special condition
+                // Only move the box if we're not clicking on the circle and not in circle dragging state
                 if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                    if !self.box2.is_point_in_circle(pointer_pos) && !(self.mouse1_pressed && self.last_click_in_circle) {
+                    if !self.box2.is_point_in_circle(pointer_pos) && !self.is_circle_dragging {
                         self.box2.position += response2.drag_delta();
                         self.box2.circle_center = egui::Pos2::new(
                             self.box2.position.x + self.box2.size.x / 2.0,
@@ -124,6 +139,13 @@ impl eframe::App for App {
             // Draw circles
             painter.circle_filled(self.box1.circle_center, 10.0, egui::Color32::WHITE);
             painter.circle_filled(self.box2.circle_center, 10.0, egui::Color32::WHITE);
+
+            // Draw line from circle to cursor when circle dragging
+            if self.is_circle_dragging {
+                if let (Some(origin), Some(cursor_pos)) = (self.circle_drag_origin, ui.input(|i| i.pointer.hover_pos())) {
+                    painter.line_segment([origin, cursor_pos], egui::Stroke::new(2.0, egui::Color32::YELLOW));
+                }
+            }
 
             // Handle line drawing
             if response1.clicked() {
